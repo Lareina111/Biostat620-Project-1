@@ -1,0 +1,177 @@
+---
+title: "620proj"
+output: html_document
+date: "2024-02-23"
+---
+
+```{r}
+library(lubridate)
+library(readxl)
+```
+
+```{r}
+data_rongji  <- read_excel("Users/jiniuniu/Downloads/ScreenTime_rongji.xlsx") 
+data_yangme  <- read_excel("Users/jiniuniu/Downloads/ScreenTime_yangme.xlsx") 
+data_zyzahng <- read_excel("Users/jiniuniu/Downloads/ScreenTime_zyzahng.xlsx") 
+```
+
+```{r}
+calculate_angular <- function(data, time, time_ang) {
+  data[[time_ang]] <- ((hour(data[[time]]) * 60 + minute(data[[time]])) / (24 * 60) * 360)
+  return(data)
+}
+
+data_rongji  <- calculate_angular(data_rongji,  "Pickup.1st", "Pickup.1st.angular")
+data_yangme  <- calculate_angular(data_yangme,  "Pickup.1st", "Pickup.1st.angular")
+data_zyzahng <- calculate_angular(data_zyzahng, "Pickup.1st", "Pickup.1st.angular")
+
+data_merge   <- rbind(data_rongji, data_yangme, data_zyzahng)
+```
+
+```{r}
+predictors <- c("Pickups", "Pickup.1st.angular", "temp")
+
+X_1 <- as.matrix(cbind(1, data_rongji[, predictors]))
+X_2 <- as.matrix(cbind(1, data_yangme[, predictors]))
+X_3 <- as.matrix(cbind(1, data_zyzahng[, predictors]))
+
+y_1 <- as.matrix(data_rongji[, response])
+y_2 <- as.matrix(data_yangme[, response])
+y_3 <- as.matrix(data_zyzahng[, response])
+```
+
+```{r}
+SSX_1 <- t(X_1) %*% X_1
+SSX_2 <- t(X_2) %*% X_2
+SSX_3 <- t(X_3) %*% X_3
+SSY_1 <- t(y_1) %*% y_1
+SSY_2 <- t(y_2) %*% y_2
+SSY_3 <- t(y_3) %*% y_3
+SSXY_1 <- t(X_1) %*% y_1
+SSXY_2 <- t(X_2) %*% y_2
+SSXY_3 <- t(X_3) %*% y_3
+```
+
+```{r}
+beta_hat_merged <- solve(SSX_1+SSX_2+SSX_3) %*% (SSXY_1 + SSXY_2 + SSXY_3)
+beta_hat_merged
+```
+
+```{r}
+model_oracle <- lm(Total.ST.min~ Pickups + Pickup.1st.angular + temp, data = data_merge)
+summary_oracle <- summary(model_oracle)
+summary_oracle$coefficients[,1]
+```
+
+Linearity
+
+```{r}
+plot(data_merge$Pickups, data_merge$Total.ST.min)
+abline(model_oracle, col = "red")
+
+plot(data_merge$Pickup.1st.angular, data_merge$Total.ST.min)
+abline(model_oracle, col = "red")
+
+plot(data_merge$temp, data_merge$Total.ST.min)
+abline(model_oracle, col = "red")
+```
+
+Equal Variance
+
+```{r}
+plot(fitted(model_oracle), residuals(model_oracle))
+abline(h = 0, col = "red")
+```
+
+Normality
+
+```{r}
+qqnorm(residuals(model_oracle))
+qqline(residuals(model_oracle), col = "red")
+```
+
+```{r}
+library(circular)
+
+output_path <- "/Users/jiniuniu/Downloads/"
+
+png(paste(output_path, "combined_clocks.png", sep=""), width=18, height=6, units="in", res=300)
+par(mfrow=c(1, 3))
+
+first.pickup.cir_rj = circular(data_rongji$Pickup.1st.angular, units="degrees", template="clock24")
+plot(first.pickup.cir_rj, col="blue", main="Rongji First Pickup Time")
+
+first.pickup.cir_ym = circular(data_yangme$Pickup.1st.angular, units="degrees", template="clock24")
+plot(first.pickup.cir_ym, col="blue", main="Yangme First Pickup Time")
+
+first.pickup.cir_zzy = circular(data_zyzahng$Pickup.1st.angular, units="degrees", template="clock24")
+plot(first.pickup.cir_zzy, col="blue", main="Zzy First Pickup Time")
+
+dev.off()
+
+```
+
+```{r}
+library(gridExtra)
+library(ggplot2)
+library(lubridate)
+library(scales)
+
+screen_1$Date <- as.Date(screen_1$Date, format = "%m/%d/%Y")
+screen_2$Date <- as.Date(screen_2$Date, format = "%m/%d/%Y")
+screen_3$Date <- as.Date(screen_3$Date, format = "%m/%d/%Y")
+
+my_theme <- theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5),
+        axis.title = element_text(size = 12), 
+        axis.text = element_text(size = 10))
+
+B_plot <- ggplot(data = screen_1, aes(x = Date, y = Total.ST.min)) + 
+  geom_line() + 
+  geom_smooth(method = "gam", color = "blue") +
+  labs(title = "RJ's Total Screen Time", x = "Date", y = "Total ST min") +
+  my_theme +
+  scale_x_date(labels = date_format("%m/%d"))
+ggsave("B_plot.png", B_plot, width = 6, height = 6, dpi = 300)
+
+C_plot <- ggplot(data = screen_2, aes(x = Date, y = Total.ST.min)) + 
+  geom_line() + 
+  geom_smooth(method = "gam", color = "blue") +
+  labs(title = "YM's Total Screen Time", x = "Date", y = "Total ST min") +
+  my_theme +
+  scale_x_date(labels = date_format("%m/%d")) 
+ggsave("C_plot.png", C_plot, width = 6, height = 6, dpi = 300)
+
+D_plot <- ggplot(data = screen_3, aes(x = Date, y = Total.ST.min)) + 
+  geom_line() + 
+  geom_smooth(method = "gam", color = "blue") +
+  labs(title = "ZYZ's Total Screen Time", x = "Date", y = "Total ST min") +
+  my_theme +
+  scale_x_date(labels = date_format("%m/%d"))
+ggsave("D_plot.png", D_plot, width = 6, height = 6, dpi = 300)
+```
+
+```{r}
+combined_plot <- grid.arrange(B_plot, C_plot, D_plot, ncol = 3, top = "Total Screen Time Comparison")
+ggsave("/Users/jiniuniu/Downloads/combined_plot.png", combined_plot, width = 18, height = 6, dpi = 300)
+```
+
+```{r}
+beta_rj = solve(SSX_1) %*% SSXY_1
+beta_ym = solve(SSX_2) %*% SSXY_2
+beta_zz = solve(SSX_3) %*% SSXY_3
+```
+
+```{r}
+n = 124
+p = 4
+sigma_hat_sq = ((SSY_1 + SSY_2 + SSY_3) - 2*t(beta_hat_merged)%*%(SSXY_1 + SSXY_2 + SSXY_3) + t(beta_hat_merged) %*% (SSX_1 + SSX_2 + SSX_3) %*% beta_hat_merged) / (n - p)
+```
+
+```{r}
+se_beta_0 <- sqrt(sigma_hat_sq * solve(SSX_1 + SSX_2 + SSX_3)[1,1])
+se_beta_1 <- sqrt(sigma_hat_sq * solve(SSX_1 + SSX_2 + SSX_3)[2,2])
+se_beta_2 <- sqrt(sigma_hat_sq * solve(SSX_1 + SSX_2 + SSX_3)[3,3])
+se_beta_3 <- sqrt(sigma_hat_sq * solve(SSX_1 + SSX_2 + SSX_3)[4,4])
+```
